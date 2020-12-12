@@ -86,9 +86,9 @@ async def on_message(message):
             Limit.append(message.author.id)
             with open('Temp/Limit.binaryfile', 'wb')as Box_Limit:
                 pickle.dump(Limit, Box_Limit)
-            Temp = await message.channel.send("あなたの運勢は...")
+            Temp = await message.channel.send(f"<@{message.author.id}> あなたの運勢は...")
             await asyncio.sleep(3)
-            await Temp.edit(content=f"あなたの運勢は...**{random.choice(Result)}**です。")
+            await Temp.edit(content=f"<@{message.author.id}> の運勢は...**{random.choice(Result)}**です。")
             return
 
     
@@ -97,11 +97,15 @@ async def on_message(message):
             Temp = int(re.sub(r"\D", "", message.content))
             if Temp in Limit:
                 Limit.remove(Temp)
-                await message.channle.send(f"<@{Temp}> の制限を解除しました。")
+                await message.channel.send(f"<@{Temp}> の制限を解除しました。")
                 return
-            
             else:
                 await message.channel.send(f"<@{Temp}> は制限されていません。")
+                return
+
+        else:
+            await message.channel.send(f"<@{message.author.id}> 管理者権限がありません。")
+            return
 
 
 client.run(Token)
