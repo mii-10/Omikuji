@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands
 import pickle
 import configparser
 import random
@@ -8,35 +9,32 @@ import sys
 import asyncio
 import re
 
-global JST
-global Youbi
-global OldYoubi
-global Limit
+#接続に必要なオブジェクト生成
+bot = commands.Bot(command_prefix="!")
+
 
 with open('Temp/OldYoubi.binaryfile', 'rb')as Box_OldYoubi:
-    OldYoubi = pickle.load(Box_OldYoubi)
+    bot.OldYoubi = pickle.load(Box_OldYoubi)
 
-JST = timezone(timedelta(hours=9))
+bot.JST = timezone(timedelta(hours=9))
 
-Youbi = datetime.now(tz=JST).strftime('%w')
+bot.Youbi = datetime.now(tz=bot.JST).strftime('%w')
 
-if OldYoubi == Youbi:
+if bot.OldYoubi == bot.Youbi:
     with open('Temp/Limit.binaryfile', 'rb')as Box_Limit:
         Limit = pickle.load(Box_Limit)
     print("本日起動済みの為、本日の履歴から復元します。")
 
 else:
-    Limit = []
-    OldYoubi = Youbi
+    bot.Limit = []
+    bot.OldYoubi = bot.Youbi
     with open('Temp/Limit.binaryfile', 'wb')as Box_Limit:
-        pickle.dump(Limit, Box_Limit)
+        pickle.dump(bot.Limit, Box_Limit)
 
     with open('Temp/OldYoubi.binaryfile', 'wb')as Box_OldYoubi:
-        pickle.dump(OldYoubi, Box_OldYoubi)
+        pickle.dump(bot.OldYoubi, Box_OldYoubi)
     print("本日は起動していないためリセットしました。")
 
-#接続に必要なオブジェクト生成
-client = discord.Client()
 
 #ファイル操作に必要なあれこれ
 ini = configparser.ConfigParser(strict=False)
@@ -48,64 +46,60 @@ ini.read('./config.ini', encoding='utf-8')
 Token = (ini.get('Bot', 'Token'))
 
 #Adminの読み込み
-Admin = (ini.get('Bot', 'Admin'))
+bot.Admin = (ini.get('Bot', 'Admin'))
 
-@client.event
+bot.Result = ["大吉","吉", "中吉", "小吉", "末吉", "凶"]
+
+@bot.event
 async def on_ready():
-    print(f'次のBotが起動しました: {client.user.name}')
-    print(f'Bot ID: {client.user.id}')
-    await client.change_presence(activity=discord.Game(name="現在稼働中！"))
+    print(f'次のBotが起動しました: {bot.user.name}')
+    print(f'Bot ID: {bot.user.id}')
+    await bot.change_presence(activity=discord.Game(name="現在稼働中！"))
 
-@client.event
+@bot.event
 async def on_message(message):
-    global JST
-    global Youbi
-    global OldYoubi
-    global Limit
-
-    Result = ["大吉","吉", "中吉", "小吉", "末吉", "凶"]
 
     if message.author.bot:
         return
 
-    if OldYoubi != Youbi:
-        Limit = []
-        OldYoubi = Youbi
+    if bot.OldYoubi != bot.Youbi:
+        bot.Limit = []
+        bot.OldYoubi = bot.Youbi
         with open('Temp/Limit.binaryfile', 'wb')as Box_Limit:
-            pickle.dump(Limit, Box_Limit)
+            pickle.dump(bot.Limit, Box_Limit)
 
         with open('Temp/OldYoubi.binaryfile', 'wb')as Box_OldYoubi:
-            pickle.dump(OldYoubi, Box_OldYoubi)
+            pickle.dump(bot.OldYoubi, Box_OldYoubi)
 
-    if message.content in ["!kuso", "!ks"]:
-        if message.author.id in Limit:
-            await message.channel.send("1日1回しか引けません。")
-            return
-        
-        else:
-            Limit.append(message.author.id)
-            with open('Temp/Limit.binaryfile', 'wb')as Box_Limit:
-                pickle.dump(Limit, Box_Limit)
-            Temp = await message.channel.send(f"<@{message.author.id}> あなたの運勢は...")
-            await asyncio.sleep(3)
-            await Temp.edit(content=f"<@{message.author.id}> の運勢は...**{random.choice(Result)}**です。")
-            return
+    await bot.process_commands(message)
+    
+@bot.command(name="omikuji",aliases=["mikuji"])
+async def omikuji_(ctx):
+    if ctx.author.id in bot.Limit:
+        await ctx.channel.send("1日1回しか引けません。")
+
+    else:
+        bot.Limit.append(ctx.author.id)
+        with open('Temp/Limit.binaryfile', 'wb')as Box_Limit:
+            pickle.dump(bot.Limit, Box_Limit)
+        Temp = await ctx.send(f"{ctx.author.mention} あなたの運勢は...")
+        await asyncio.sleep(3)
+        await Temp.edit(content=f"{ctx.author.mention} の運勢は...**{random.choice(bot.Result)}**です。")
 
     
-    if message.content.startswith("/relimit"):
-        if str(message.author.id) in Admin:
-            Temp = int(re.sub(r"\D", "", message.content))
-            if Temp in Limit:
-                Limit.remove(Temp)
-                await message.channel.send(f"<@{Temp}> の制限を解除しました。")
-                return
-            else:
-                await message.channel.send(f"<@{Temp}> は制限されていません。")
-                return
-
+@bot.command(name="relimit")
+async def relimit_(ctx,member:commands.MemberConverter):
+    if str(ctx.author.id) in bot.Admin:
+        if member.id in bot.Limit:
+            bot.Limit.remove(member)
+            await ctx.send(f"{member.mention} の制限を解除しました。")
         else:
-            await message.channel.send(f"<@{message.author.id}> 管理者権限がありません。")
-            return
+            await ctx.send(f"{member.mention} は制限されていません。")
 
 
-client.run(Token)
+    else:
+        await ctx.send(f"{ctx.author.mention} 管理者権限がありません。")
+
+
+
+bot.run(Token)
